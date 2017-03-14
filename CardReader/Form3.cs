@@ -90,7 +90,7 @@ namespace CardReader
         private void Form3_FormClosed(object sender, FormClosedEventArgs e)
         {
             Form1 main = this.Owner as Form1;
-            if (main != null)
+            if (main != null) 
             {
                 main.SetConf(main.serialPort1);
             }
