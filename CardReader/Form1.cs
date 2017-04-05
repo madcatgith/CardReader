@@ -27,10 +27,11 @@ namespace CardReader
         public static string dbmysql_port = "3306";
         public static string dbmysql_password = "NGNscheduler746";
         public static string connStr = "Server=" + mysql_server + ";user=" + dbmysql_username + ";database=" + dbmysql_name + ";port=" + dbmysql_port + ";password=" + dbmysql_password + ";";
+        private static bool startread = false;
 
         public Form1()
         {
-            InitializeComponent();          
+            InitializeComponent();         
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -49,6 +50,7 @@ namespace CardReader
         }
 
         private void startRead() {
+            cardkey = "";
             if (serialPort1.IsOpen)
             {
                 serialPort1.Close();
@@ -59,13 +61,21 @@ namespace CardReader
                 button2.Enabled = true;
                 button1.Enabled = false;
                 Debug.WriteLine("opened");
-                OnStartBeep();
-                pictureBox1.ImageLocation = "icons/connected.png";
+                if (serialPort1.IsOpen)
+                {
+                    OnStartBeep();
+                    pictureBox1.ImageLocation = "icons/connected.png";
+                    notifyIcon1.Text = "Читаем приходы";
+                }
+                else {
+                    notifyIcon1.Text = "Считываение отключено";
+                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine(ex);
                 pictureBox1.ImageLocation = "icons/disconnected.png";
+                notifyIcon1.Text = "Считываение отключено";
             }
         }
 
@@ -73,7 +83,8 @@ namespace CardReader
         {
             try
             {
-
+                int answerlength = 26;
+                //int answerlength = 24;
                 byte[] buffer = new byte[serialPort1.BytesToRead];
                 serialPort1.Read(buffer, 0, serialPort1.BytesToRead);
                 StringBuilder sb = new StringBuilder();
@@ -82,9 +93,20 @@ namespace CardReader
                     sb.AppendFormat("{0:X2}", buffer[i]);
                 }
 
+
+                if (sb.ToString().Substring(0,2).Equals("23")) { startread = true; }
                 //if ((sb.ToString().Equals("00")) && (!cardkey.Equals("")))
-                cardkey += sb.ToString();
-                if (cardkey.Length==26)
+                if (startread)
+                {
+                    cardkey += sb.ToString();
+                }
+                else {
+                    cardkey = "";
+                }
+                if (sb.ToString().Substring(0, 2).Equals("0D")) { startread = false; }
+
+                //Debug.WriteLine(sb.ToString());
+                if (cardkey.Length==answerlength)
                 {
                     showCnumber(cardkey);
                     cardkey = "";
@@ -98,10 +120,20 @@ namespace CardReader
 
         private void button2_Click(object sender, EventArgs e)
         {
-            serialPort1.Close();
-            button1.Enabled = true;
-            button2.Enabled = false;
-            Debug.WriteLine("close");
+            try
+            {
+                if (serialPort1.IsOpen)
+                {
+                    serialPort1.Close();
+                }
+                button1.Enabled = true;
+                button2.Enabled = false;
+                Debug.WriteLine("close");
+                notifyIcon1.Text = "Считываение отключено";
+            }
+            catch (Exception ex) {
+                Debug.WriteLine(ex);
+            }
         }
 
         public void showCnumber(string key = "")
@@ -118,13 +150,20 @@ namespace CardReader
                         cleankey += key[i];
                     }
                 }
-                Debug.WriteLine(cleankey);
+                //Debug.WriteLine(cleankey);
                 /*if (listBox1.FindString(cleankey) == -1)
                 {*/
                     string[] user = SelectUserByCard(cleankey);
-                    CameToWork(Int32.Parse(user[0]),user[1]);
+                if (user[0]!=null)
+                {
+                    CameToWork(Int32.Parse(user[0]), user[1]);
                     listBox1.Invoke(new Action(() => listBox1.Items.Add(cleankey)));
                     successBeep();
+                }
+                else {
+                    Debug.WriteLine("No such card");
+                    ErrorBeep();
+                }
                 /*}*/
             }
         }
@@ -140,9 +179,30 @@ namespace CardReader
             onstartbeep.Start();
         }
 
+        public void ErrorBeep() {
+            Thread errorbeep = new Thread(errorbeepsent);
+            errorbeep.Start();
+        }
+
+        public void errorbeepsent() {
+            byte[] com = new byte[] { 0x49, 0x20, 0x04 };
+            serialPort1.Write(com, 0, 3);
+            Thread.Sleep(4000);
+            com = new byte[] { 0x49, 0x00, 0x00 };
+            serialPort1.Write(com, 0, 3);
+            Thread.Sleep(0);
+        }
+
         public void greenbeep(float timeout) {
             timeout = timeout * 1000;
+            Thread.Sleep((int)timeout);
             byte[] com = new byte[] { 0x49, 0x00, 0x81 };
+            serialPort1.Write(com, 0, 3);
+            Thread.Sleep((int)timeout);
+            com = new byte[] { 0x49, 0x00, 0x00 };
+            serialPort1.Write(com, 0, 3);
+            Thread.Sleep((int)timeout);
+            com = new byte[] { 0x49, 0x00, 0x81 };
             serialPort1.Write(com, 0, 3);
             Thread.Sleep((int)timeout);
             com = new byte[] { 0x49, 0x00, 0x00 };
@@ -151,18 +211,30 @@ namespace CardReader
         }
 
         public void startbeep() {
-            byte[] com = new byte[] { 0x49, 0x00, 0x81 };
-            serialPort1.Write(com, 0, 3);
-            Thread.Sleep(100);
-            com = new byte[] { 0x49, 0x00, 0x00 };
-            serialPort1.Write(com, 0, 3);
-            Thread.Sleep(100);
-            com = new byte[] { 0x49, 0x00, 0x81 };
-            serialPort1.Write(com, 0, 3);
-            Thread.Sleep(100);
-            com = new byte[] { 0x49, 0x00, 0x00 };
-            serialPort1.Write(com, 0, 3);
-            Thread.Sleep(0);
+            try
+            {
+                byte[] com = new byte[] { 0x49, 0x00, 0x81 };
+                serialPort1.Write(com, 0, 3);
+                Thread.Sleep(200);
+                com = new byte[] { 0x49, 0x00, 0x00 };
+                serialPort1.Write(com, 0, 3);
+                Thread.Sleep(100);
+                com = new byte[] { 0x49, 0x00, 0x81 };
+                serialPort1.Write(com, 0, 3);
+                Thread.Sleep(200);
+                com = new byte[] { 0x49, 0x00, 0x00 };
+                serialPort1.Write(com, 0, 3);
+                Thread.Sleep(100);
+                com = new byte[] { 0x49, 0x00, 0x81 };
+                serialPort1.Write(com, 0, 3);
+                Thread.Sleep(200);
+                com = new byte[] { 0x49, 0x00, 0x00 };
+                serialPort1.Write(com, 0, 3);
+                Thread.Sleep(0);
+            }
+            catch (Exception ex) {
+                Debug.WriteLine(ex);
+            }
         }
 
         public void nullsate() {
@@ -186,8 +258,11 @@ namespace CardReader
 
         private void button4_Click(object sender, EventArgs e)
         {
+            successBeep();
+            //serialPort1.BaseStream.Flush();
+            //successBeep();
             //CreateIncomeDB();
-            Debug.WriteLine(serialPort1.PortName.ToString());
+            //Debug.WriteLine(serialPort1.PortName.ToString());
         }
         
 
@@ -244,6 +319,7 @@ namespace CardReader
                 SQLiteCommand command = new SQLiteCommand("INSERT INTO 'income' ('user_id','name') VALUES ('" + user_id + "','" + name + "');", conn);
                 command.ExecuteNonQuery();
                 conn.Close();
+                LeaveWork(user_id, name);
             }
             else {
                 Debug.WriteLine("Already came");
@@ -643,6 +719,7 @@ namespace CardReader
             }
             startRead();
             timer1.Start();
+            this.Hide();
             //SqlDataSelectAll();
 
         }
@@ -672,6 +749,20 @@ namespace CardReader
             {
                 DateTime today = DateTime.Today;
                 writetext.WriteLine("DATE=" + today.ToString("d"));
+            }
+        }
+
+        private void notifyIcon1_MouseDoubleClick(object sender, MouseEventArgs e)
+        {
+            this.Show();
+            this.WindowState = FormWindowState.Normal;
+        }
+
+        private void Form1_Resize(object sender, EventArgs e)
+        {
+            if (WindowState == FormWindowState.Minimized)
+            {
+                this.Hide();
             }
         }
     }
